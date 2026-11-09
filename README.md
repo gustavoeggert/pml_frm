@@ -10,7 +10,7 @@ Current status and hand-over notes for new sessions: [PROJECT_STATE.md](PROJECT_
 | `MS1/data_loader.py` | `load_data()`: lazy train/test generators over the Sudoku-Extreme CSVs |
 | `MS1/validate_dataset.py` | Full-dataset integrity check (run on the cluster) |
 | `MS1/visualization.py` | `show()`: renders Sudoku boards, optionally to a file |
-| `MS1/model.py` | Transforms (`to_flat`, `augment`, `make_transform`), `Model`, `decode`, `sudoku_loss` |
+| `MS1/model.py` | `to_flat`, `augment`, `augmented` (training-stream augmentation), `Model`, `decode`, `sudoku_loss` |
 | `MS1/train.py` | Training loop, evaluation, logging and checkpointing |
 | `MS1/baselines.py` | Random, majority-digit, naive-candidate and backtracking baselines |
 | `MS1/metrics.py` | Cell accuracy, exact match, rule violations, clue-bucket breakdown |
@@ -46,9 +46,10 @@ python -m MS1.train --n-train 3000 --n-test 200 --epochs 2 --out-dir MS1/results
 
 ```python
 from MS1.data_loader import load_data
-from MS1.model import make_transform
+from MS1.model import augmented, to_flat
 
-train, test = load_data(transformation=make_transform(use_augmentation=True), n_train=1000, n_test=100)
+train, test = load_data(transformation=to_flat, n_train=1000, n_test=100)   # train and test both get the same transformation
+train = augmented(load_data(n_train=1000, n_test=0)[0])                      # training-only augmentation, applied outside load_data
 x, y = next(train)   # two int64 arrays of 81 digits; 0 marks a blank, clue mask = x > 0
 ```
 
@@ -67,7 +68,9 @@ x, y = next(train)   # two int64 arrays of 81 digits; 0 marks a blank, clue mask
 
 ```bash
 sbatch --partition=gpu-test MS1/run_train.sbatch smoke
-sbatch MS1/run_train.sbatch full
+sbatch MS1/run_train.sbatch baselines
+sbatch MS1/run_train.sbatch noaug
+sbatch MS1/run_train.sbatch aug
 ```
 
 - Building the container needs memory: `srun --partition=cpu-2h --mem=32G --cpus-per-task=4 --pty bash`, then `apptainer build pml.sif pml.def`.

@@ -227,7 +227,7 @@ The data loader and initial smoke tests have been executed successfully on Windo
 
 ### Representation
 
-Model code flattens each `(9, 9)` grid to 81 `int64` digits (`MS1/model.py::to_flat`). The clue mask is `x > 0`. `augment` (digit, band/stack and row/column permutations, transpose) is optional, applied to training data only, and passed through `make_transform(use_augmentation=True)` as the `transformation` of `load_data`.
+Model code flattens each `(9, 9)` grid to 81 `int64` digits (`MS1/model.py::to_flat`). The clue mask is `x > 0`. `augment` (digit, band/stack and row/column permutations, transpose) is optional and applied to the training stream only through `augmented(...)`, never through the `transformation` of `load_data`, because `load_data` applies its transformation to both the train and the test generator.
 
 ### Model (`MS1/model.py`)
 
@@ -259,7 +259,9 @@ Cell accuracy on blank cells, exact-match puzzle accuracy (primary), valid-grid 
 
 ```bash
 sbatch --partition=gpu-test MS1/run_train.sbatch smoke
-sbatch MS1/run_train.sbatch full
+sbatch MS1/run_train.sbatch baselines
+sbatch MS1/run_train.sbatch noaug
+sbatch MS1/run_train.sbatch aug
 ```
 
 ### Status
