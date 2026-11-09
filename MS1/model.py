@@ -24,16 +24,11 @@ def augment(x, y, rng):
     return digits[x], digits[y]
 
 
-def make_transform(use_augmentation=False, seed=0):
-    """Transformation for load_data; augmentation is for training only."""
+def augmented(samples, seed=0):
+    """Augment and flatten a (9, 9) (x, y) stream; apply to the training stream only, never via load_data."""
     rng = np.random.default_rng(seed)
-
-    def transform(x, y):
-        if use_augmentation:
-            x, y = augment(x, y, rng)
-        return to_flat(x, y)
-
-    return transform
+    for x, y in samples:
+        yield to_flat(*augment(x, y, rng))
 
 
 class Model(torch.nn.Module):

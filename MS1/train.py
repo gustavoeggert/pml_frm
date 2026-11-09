@@ -10,7 +10,7 @@ import torch
 
 from MS1.data_loader import load_data
 from MS1.metrics import MetricAccumulator
-from MS1.model import Model, decode, make_transform, sudoku_loss
+from MS1.model import Model, augmented, decode, sudoku_loss, to_flat
 
 
 def _shuffled(samples, buffer_size, rng):
@@ -47,7 +47,7 @@ def iter_batches(samples, batch_size, shuffle_buffer=0, seed=0):
 
 def _load_fixed(n, split, data_dir):
     kwargs = {"n_train": n, "n_test": 0} if split == "train" else {"n_train": 0, "n_test": n}
-    gen = load_data(transformation=make_transform(False), data_dir=data_dir, **kwargs)[
+    gen = load_data(transformation=to_flat, data_dir=data_dir, **kwargs)[
         0 if split == "train" else 1
     ]
     return _collate(list(gen))
@@ -137,15 +137,16 @@ def main():
         }
         log.writerow(row)
         log_file.flush()
+        torch.save({"state_dict": model.state_dict(), "args": vars(args)}, out_dir / "model.pt")
         print(" ".join(f"{k}={v:.4g}" if isinstance(v, float) else f"{k}={v}" for k, v in row.items()), flush=True)
 
     step, last_logged, running = 0, 0, []
     for epoch in range(args.epochs):
         train_gen, _ = load_data(
-            transformation=make_transform(args.augment, args.seed + epoch),
-            n_train=args.n_train, n_test=0, data_dir=args.data_dir,
+            transformation=None, n_train=args.n_train, n_test=0, data_dir=args.data_dir,
         )
-        for X, Y in iter_batches(train_gen, args.batch_size, args.shuffle_buffer, args.seed + epoch):
+        samples = augmented(train_gen, args.seed + epoch) if args.augment else (to_flat(x, y) for x, y in train_gen)
+        for X, Y in iter_batches(samples, args.batch_size, args.shuffle_buffer, args.seed + epoch):
             model.train()
             X, Y = X.to(device), Y.to(device)
             loss = sudoku_loss(model(X, return_all=True), X, Y)

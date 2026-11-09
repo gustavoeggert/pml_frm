@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 from MS1.metrics import count_violations
-from MS1.model import Model, augment, decode, make_transform, sudoku_loss, to_flat
+from MS1.model import Model, augment, augmented, decode, sudoku_loss, to_flat
 from MS1.train import iter_batches
 
 SOLUTION = np.array([int(c) for c in (
@@ -40,8 +40,8 @@ class TestAugment(unittest.TestCase):
             self.assertTrue(np.all((ax == 0) | (ax == ay)))
             self.assertEqual((ax == 0).sum(), (x == 0).sum())
 
-    def test_transform_flattens(self):
-        fx, fy = make_transform(use_augmentation=True)(SOLUTION, SOLUTION)
+    def test_augmented_stream_flattens(self):
+        fx, fy = next(augmented(iter([(SOLUTION, SOLUTION)])))
 
         self.assertEqual(fx.shape, (81,))
         self.assertEqual(fy.dtype, np.int64)
