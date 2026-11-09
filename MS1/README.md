@@ -1,5 +1,5 @@
-# Milestone 1 — Sudoku-Extreme Data Loading and Validation
-**Component:** Data Loading and Dataset Management
+# Milestone 1 — Sudoku-Extreme: Data, Baselines and Prototype Model
+**Components:** Data loading, visualization, model prototype, baselines. Sections 1–8 describe the data component; section 9 describes the model and baselines.
 
 ## 1. Overview
 
@@ -174,9 +174,10 @@ Results are saved to:
 
 ## 5. Testing
 
-Automated unit tests are available in:
+Automated unit tests are available in `MS1/tests/`:
 
-`MS1/tests/test_data_loader.py`
+- `test_data_loader.py`: sample counts, board shapes, clue consistency, sample limits, transformations, generator behavior.
+- `test_metrics.py`, `test_baselines.py`, `test_model.py`: metrics, baselines, augmentation, model shapes/gradients/overfitting, batching.
 
 Run them locally from the repository root:
 
@@ -221,3 +222,46 @@ The data loader requires Python 3 and NumPy.
 Additional project dependencies are listed in the repository's root `requirements.txt`.
 
 The data loader and initial smoke tests have been executed successfully on Windows and on a Hydra CPU compute node.
+
+## 9. Model, Baselines and Training
+
+### Representation
+
+Model code flattens each `(9, 9)` grid to 81 `int64` digits (`MS1/model.py::to_flat`). The clue mask is `x > 0`. `augment` (digit, band/stack and row/column permutations, transpose) is optional, applied to training data only, and passed through `make_transform(use_augmentation=True)` as the `transformation` of `load_data`.
+
+### Model (`MS1/model.py`)
+
+- Digit embedding plus learned row, column and box embeddings and a learnable initial state (`nn.Parameter`).
+- One shared transformer block applied `n_steps` times (fixed loop, no data-dependent control flow), input re-injected each step.
+- Output: logits `(B, 81, 9)`; `return_all=True` gives all steps `(B, n_steps, 81, 9)`. `decode` returns digits 1-9 and keeps the given clues.
+- Loss `sudoku_loss`: cross-entropy on blank cells, averaged over steps.
+
+### Baselines (`MS1/baselines.py`)
+
+| Baseline | Idea |
+|---|---|
+| Random | Uniform digit in every blank cell |
+| Majority | Most frequent solution digit in every blank cell |
+| Naive candidates | Naked and hidden singles only, no search |
+| Backtracking | Exact solver (propagation + minimum-remaining-values branching) |
+
+### Metrics (`MS1/metrics.py`)
+
+Cell accuracy on blank cells, exact-match puzzle accuracy (primary), valid-grid rate (no row/column/box duplicates), and all of these by clue-count bucket. Precision/recall do not fit the task: it is a 9-class, structured prediction with one correct answer per puzzle.
+
+### Training (`MS1/train.py`)
+
+`python -m MS1.train --n-train 100000 --n-test 2000 --epochs 3 [--augment]`. It logs train loss, a probe of seen training puzzles and the test slice (the gap is the overfitting check) to `log.csv` and writes `results.json` and `model.pt` into `--out-dir`.
+
+### Running on Hydra
+
+`MS1/run_train.sbatch` runs inside the Apptainer container `~/pml.sif` (built from `pml.def`):
+
+```bash
+sbatch --partition=gpu-test MS1/run_train.sbatch smoke
+sbatch MS1/run_train.sbatch full
+```
+
+### Status
+
+Baselines work (backtracking reaches 100% exact match). The model has not yet been shown to leave the chance-level plateau in short local runs; cluster results are pending. See `PROJECT_STATE.md` in the repository root.
