@@ -3,6 +3,7 @@ import csv
 import json
 import math
 import random
+from itertools import islice
 from pathlib import Path
 
 import numpy as np
@@ -45,12 +46,13 @@ def iter_batches(samples, batch_size, shuffle_buffer=0, seed=0):
         yield _collate(batch)
 
 
-def _load_fixed(n, split, data_dir):
-    kwargs = {"n_train": n, "n_test": 0} if split == "train" else {"n_train": 0, "n_test": n}
+def _load_fixed(n, split, data_dir, skip=0):
+    # The loader has no offset, so read skip + n rows and drop the first skip.
+    kwargs = {"n_train": skip + n, "n_test": 0} if split == "train" else {"n_train": 0, "n_test": skip + n}
     gen = load_data(transformation=to_flat, data_dir=data_dir, **kwargs)[
         0 if split == "train" else 1
     ]
-    return _collate(list(gen))
+    return _collate(list(islice(gen, skip, None)))
 
 
 @torch.no_grad()
@@ -71,6 +73,7 @@ def main():
     p.add_argument("--n-train", type=int, default=100_000)
     p.add_argument("--n-test", type=int, default=2000)
     p.add_argument("--n-probe", type=int, default=2000, help="seen training puzzles used for the overfitting check")
+    p.add_argument("--n-fresh", type=int, default=2000, help="unseen train.csv puzzles right after the training rows (0 = off)")
     p.add_argument("--epochs", type=int, default=3)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=1e-3)
@@ -99,6 +102,7 @@ def main():
 
     test_X, test_Y = _load_fixed(args.n_test, "test", args.data_dir)
     probe_X, probe_Y = _load_fixed(min(args.n_probe, args.n_train), "train", args.data_dir)
+    fresh = _load_fixed(args.n_fresh, "train", args.data_dir, skip=args.n_train) if args.n_fresh else None
 
     model = Model(
         args.d_model, args.n_heads, args.n_layers, args.n_steps,
@@ -120,6 +124,8 @@ def main():
         "probe_loss", "probe_cell_acc", "probe_exact",
         "test_loss", "test_cell_acc", "test_exact", "test_valid",
     ]
+    if fresh is not None:
+        fields += ["fresh_loss", "fresh_cell_acc", "fresh_exact"]
     log_file = (out_dir / "log.csv").open("w", newline="")
     log = csv.DictWriter(log_file, fieldnames=fields)
     log.writeheader()
@@ -135,6 +141,10 @@ def main():
             "test_loss": test_loss, "test_cell_acc": ts["cell_acc"],
             "test_exact": ts["exact"], "test_valid": ts["valid"],
         }
+        if fresh is not None:
+            fresh_loss, fresh_acc = evaluate(model, *fresh, device)
+            fs = fresh_acc.summary()
+            row.update(fresh_loss=fresh_loss, fresh_cell_acc=fs["cell_acc"], fresh_exact=fs["exact"])
         log.writerow(row)
         log_file.flush()
         torch.save({"state_dict": model.state_dict(), "args": vars(args)}, out_dir / "model.pt")
@@ -168,6 +178,8 @@ def main():
 
     _, test = evaluate(model, test_X, test_Y, device)
     results = {"args": vars(args), "summary": test.summary(), "by_clue_bucket": test.by_clue_bucket()}
+    if fresh is not None:
+        results["fresh_summary"] = evaluate(model, *fresh, device)[1].summary()
     (out_dir / "results.json").write_text(json.dumps(results, indent=2))
     torch.save({"state_dict": model.state_dict(), "args": vars(args)}, out_dir / "model.pt")
 

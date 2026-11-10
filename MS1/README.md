@@ -233,6 +233,7 @@ Model code flattens each `(9, 9)` grid to 81 `int64` digits (`MS1/model.py::to_f
 
 - Digit embedding plus learned row, column and box embeddings and a learnable initial state (`nn.Parameter`).
 - One shared transformer block applied `n_steps` times (fixed loop, no data-dependent control flow), input re-injected each step.
+- By default each cell attends to itself and its row, column and box peers; `--global-attention` restores unrestricted attention.
 - Output: logits `(B, 81, 9)`; `return_all=True` gives all steps `(B, n_steps, 81, 9)`. `decode` returns digits 1-9 and keeps the given clues.
 - Loss `sudoku_loss`: cross-entropy on blank cells, averaged over steps.
 
@@ -251,19 +252,28 @@ Cell accuracy on blank cells, exact-match puzzle accuracy (primary), valid-grid 
 
 ### Training (`MS1/train.py`)
 
-`python -m MS1.train --n-train 100000 --n-test 2000 --epochs 3 [--augment]`. It logs train loss, a probe of seen training puzzles and the test slice (the gap is the overfitting check) to `log.csv` and writes `results.json` and `model.pt` into `--out-dir`.
+`python -m MS1.train --n-train 100000 --n-test 2000 --epochs 3 [--augment]` logs train loss, a probe of seen training puzzles, test puzzles and, by default, 2000 subsequent train-file rows (`--n-fresh 0` disables this last evaluation). It writes `log.csv`, `results.json` and `model.pt` into `--out-dir`. Checkpoints are saved during training; the final results file is written on completion.
+
+`python -m MS1.evaluate --run-dir MS1/results/run_more_data` evaluates a saved model on test, seen-train and fresh-train rows and writes `eval_fresh.json`. Fresh rows follow the training range in the CSV; because the data may be ordered or contain equivalent puzzles, this comparison alone does not establish whether a gap is due to memorization or distribution differences.
+
+For evaluation after choosing a model, `python -m MS1.evaluate --run-dir MS1/results/run_more_data --n 2000 --test-offset 2000` skips the first 2,000 test rows and writes `eval_test_offset_2000.json` without replacing `eval_fresh.json`. Test rows 2,001-4,000 were used to evaluate the selected 6-epoch configuration; three rows had also been used in a toy-model smoke test. Exact or equivalent puzzle overlap with earlier slices has not been checked.
 
 ### Running on Hydra
 
-`MS1/run_train.sbatch` runs inside the Apptainer container `~/pml.sif` (built from `pml.def`):
+`MS1/run_train.sbatch` runs inside the Apptainer container `~/pml.sif` (built from `pml.def`). The `pml` account should use the `gpu-teaching-*` partitions; the script defaults to `gpu-teaching-2h`. Submit from `~`:
 
 ```bash
-sbatch --partition=gpu-test MS1/run_train.sbatch smoke
+sbatch --time=00:30:00 MS1/run_train.sbatch smoke
 sbatch MS1/run_train.sbatch baselines
 sbatch MS1/run_train.sbatch noaug
 sbatch MS1/run_train.sbatch aug
+sbatch --time=01:30:00 MS1/run_train.sbatch long
+sbatch --time=01:30:00 MS1/run_train.sbatch aug300
+sbatch --time=01:30:00 MS1/run_train.sbatch long300
 ```
+
+`long` trains the larger model on 100k puzzles for 6 epochs. `aug300` trains it on 300k for 3 epochs with augmentation; `long300` uses 300k for 6 epochs without augmentation. They write to separate result directories. Use `squeue -j JOB_ID` for active jobs and `sacct -j JOB_ID --format=JobID,State,ExitCode,Elapsed` for completed jobs. Output logs are `~/ms1_frm_JOB_ID.log`.
 
 ### Status
 
-Baselines work (backtracking reaches 100% exact match). The model has not yet been shown to leave the chance-level plateau in short local runs; cluster results are pending. See `PROJECT_STATE.md` in the repository root.
+Cluster runs with peer attention have progressed beyond chance. The 300k-puzzle, 3-epoch larger-model run reached 72.81% test cell accuracy and 32.85% exact match on 2,000 puzzles. The matching augmentation run reached 72.07% and 31.65%; the 6-epoch unaugmented run reached 76.85% and 42.75%. On the subsequent 2,000 test rows, the selected 6-epoch configuration achieved 76.22%/39.45% and 76.09%/38.30% cell accuracy/exact match for seeds 0 and 1. Backtracking solved all 300 evaluated puzzles in the baseline run. See [PROJECT_STATE.md](../PROJECT_STATE.md) for sample sizes and limitations.
