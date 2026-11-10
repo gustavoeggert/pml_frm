@@ -25,7 +25,6 @@ def augment(x, y, rng):
 
 
 def make_transform(use_augmentation=False, seed=0):
-    """Transformation for load_data; augmentation is for training only."""
     rng = np.random.default_rng(seed)
 
     def transform(x, y):
@@ -34,6 +33,13 @@ def make_transform(use_augmentation=False, seed=0):
         return to_flat(x, y)
 
     return transform
+
+
+def augmented(samples, seed=0):
+    """Augment and flatten a (9, 9) (x, y) stream; apply to the training stream only, never via load_data."""
+    rng = np.random.default_rng(seed)
+    for x, y in samples:
+        yield to_flat(*augment(x, y, rng))
 
 
 class Model(torch.nn.Module):

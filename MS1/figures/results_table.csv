@@ -1,0 +1,7 @@
+method,n_test,cell_acc,exact,ms_per_puzzle
+Random digit,1000,0.10991321222575602,0.0,0.003954075276851654
+Majority digit,1000,0.11131475392162148,0.0,0.001039162278175354
+Naive candidates (no search),1000,0.41961799004546024,0.11,0.5999091826379299
+Backtracking solver,300,1.0,1.0,17.918099220842123
+Recurrent transformer (no augmentation),2000,0.5756335702491205,0.037,
+Recurrent transformer (augmentation),2000,0.5778591427956062,0.0375,

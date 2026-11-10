@@ -1,10 +1,16 @@
+import json
+import sys
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import torch
 
 from MS1.metrics import count_violations
-from MS1.model import Model, augment, decode, make_transform, sudoku_loss, to_flat
+from MS1.model import Model, augment, augmented, decode, make_transform, sudoku_loss, to_flat
+from MS1.evaluate import main as evaluate_main
 from MS1.train import iter_batches
 
 SOLUTION = np.array([int(c) for c in (
@@ -40,12 +46,44 @@ class TestAugment(unittest.TestCase):
             self.assertTrue(np.all((ax == 0) | (ax == ay)))
             self.assertEqual((ax == 0).sum(), (x == 0).sum())
 
-    def test_transform_flattens(self):
-        fx, fy = make_transform(use_augmentation=True)(SOLUTION, SOLUTION)
+    def test_augmented_stream_flattens(self):
+        fx, fy = next(augmented(iter([(SOLUTION, SOLUTION)])))
 
         self.assertEqual(fx.shape, (81,))
         self.assertEqual(fy.dtype, np.int64)
         self.assertEqual(to_flat(SOLUTION, SOLUTION)[0].shape, (81,))
+
+    def test_make_transform_matches_augmented_stream(self):
+        transform = make_transform(use_augmentation=True, seed=3)
+        expected = next(augmented(iter([(SOLUTION, SOLUTION)]), seed=3))
+        actual = transform(SOLUTION, SOLUTION)
+
+        np.testing.assert_array_equal(actual[0], expected[0])
+        np.testing.assert_array_equal(actual[1], expected[1])
+        np.testing.assert_array_equal(make_transform()(SOLUTION, SOLUTION)[0], SOLUTION.ravel())
+
+
+class TestEvaluate(unittest.TestCase):
+
+    def test_test_offset_preserves_existing_results(self):
+        checkpoint = {
+            "args": {"d_model": 16, "n_heads": 2, "n_layers": 1, "n_steps": 3,
+                     "global_attention": False, "n_train": 1},
+            "state_dict": small_model().state_dict(),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory)
+            (run_dir / "eval_fresh.json").write_text("existing")
+            torch.save(checkpoint, run_dir / "model.pt")
+            with patch.object(sys, "argv", ["evaluate", "--run-dir", directory, "--n", "1",
+                                           "--test-offset", "2000"]):
+                with patch("MS1.evaluate._load_fixed", side_effect=[batch(1)] * 3) as load_fixed:
+                    evaluate_main()
+
+            self.assertEqual(load_fixed.call_args_list[0].kwargs["skip"], 2000)
+            result = json.loads((run_dir / "eval_test_offset_2000.json").read_text())
+            self.assertEqual(result["test"]["offset"], 2000)
+            self.assertEqual((run_dir / "eval_fresh.json").read_text(), "existing")
 
 
 class TestModel(unittest.TestCase):
