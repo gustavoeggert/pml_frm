@@ -8,6 +8,29 @@ _BOXES = [
 ]
 # (27, 9) cell indices of every row, column and box
 GROUPS = np.stack(list(_IDX) + list(_IDX.T) + _BOXES)
+# Clue-count bucket upper edges: 17-24, 25-26, 27+ (roughly terciles of the test set)
+CLUE_EDGES = (24, 26)
+# Difficulty-rating band upper edges: 0-1 (no search needed), 2-20, 21-50, 51+
+RATING_EDGES = (1, 20, 50)
+
+
+def rating_band(rating, edges=RATING_EDGES):
+    rating = np.asarray(rating)
+    lows = [0, *[e + 1 for e in edges]]
+    names = [f"{lo}-{hi}" for lo, hi in zip(lows, edges)] + [f"{lows[-1]}+"]
+    return np.array(names)[np.searchsorted(np.asarray(edges), rating, side="left")]
+
+
+def breakdowns(acc, rating=None, source=None, shared=None):
+    """All per-subset results for one evaluated set; metadata arrays align with the puzzles."""
+    out = {"by_clue_bucket": acc.by_clue_bucket()}
+    if rating is not None:
+        out["by_rating"] = acc.by_group(rating_band(rating))
+    if source is not None:
+        out["by_source"] = acc.by_group(source)
+    if shared is not None:
+        out["by_shared_pattern"] = acc.by_group(np.where(shared, "shared", "not shared"))
+    return out
 
 
 def count_violations(pred):
@@ -54,13 +77,20 @@ class MetricAccumulator:
         d = self._cat()
         return self._summarize(d, np.ones(len(d["exact"]), dtype=bool))
 
-    def by_clue_bucket(self, n_buckets=3):
+    def by_clue_bucket(self, edges=CLUE_EDGES):
+        """Fixed buckets (upper edges inclusive) so that all methods are broken down identically."""
         d = self._cat()
-        quantiles = np.quantile(d["clues"], np.linspace(0, 1, n_buckets + 1)[1:-1])
-        ids = np.searchsorted(np.unique(quantiles), d["clues"], side="left")
+        ids = np.searchsorted(np.asarray(edges), d["clues"], side="left")
+        bounds = [17, *[e + 1 for e in edges]]
+        uppers = [*edges, 81]
         out = {}
         for b in np.unique(ids):
-            mask = ids == b
-            lo, hi = d["clues"][mask].min(), d["clues"][mask].max()
-            out[f"{lo}-{hi} clues"] = self._summarize(d, mask)
+            label = f"{bounds[b]}-{uppers[b]} clues" if b < len(edges) else f"{bounds[b]}+ clues"
+            out[label] = self._summarize(d, ids == b)
         return out
+
+    def by_group(self, labels):
+        """Breakdown by an arbitrary per-puzzle label (e.g. source, rating band, leakage flag)."""
+        d = self._cat()
+        labels = np.asarray(labels)
+        return {str(g): self._summarize(d, labels == g) for g in np.unique(labels)}

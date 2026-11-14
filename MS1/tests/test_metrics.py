@@ -43,7 +43,14 @@ class TestMetrics(unittest.TestCase):
         acc = MetricAccumulator()
         acc.update(np.stack([SOLUTION] * 4), np.stack(xs), np.stack([SOLUTION] * 4))
 
-        self.assertEqual(sum(b["n"] for b in acc.by_clue_bucket(2).values()), 4)
+        self.assertEqual(sum(b["n"] for b in acc.by_clue_bucket().values()), 4)
+
+    def test_group_breakdown(self):
+        acc = MetricAccumulator()
+        acc.update(np.stack([SOLUTION] * 3), np.stack([SOLUTION] * 3), np.stack([SOLUTION] * 3))
+        groups = acc.by_group(["a", "b", "a"])
+        self.assertEqual(groups["a"]["n"], 2)
+        self.assertEqual(groups["b"]["n"], 1)
 
 
 if __name__ == "__main__":
