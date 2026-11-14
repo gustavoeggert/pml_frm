@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from MS1.metrics import MetricAccumulator
+from MS1.metrics import MetricAccumulator, breakdowns
 
 ALL = 0x3FE  # candidate bitmask for digits 1-9
 
@@ -162,22 +162,24 @@ class BacktrackingSolver:
         return np.stack(preds)
 
 
-def _evaluate(predict, x, y):
+def _evaluate(predict, x, y, meta=None):
     start = time.perf_counter()
     pred = predict(x)
     elapsed = time.perf_counter() - start
     acc = MetricAccumulator()
     acc.update(pred, x, y)
+    meta = {k: v[:len(x)] for k, v in (meta or {}).items()}
     return {
         "n": len(x),
         "summary": acc.summary(),
-        "by_clue_bucket": acc.by_clue_bucket(),
+        **breakdowns(acc, **meta),
         "sec_per_puzzle": elapsed / len(x),
     }
 
 
 def main():
     from MS1.data_loader import load_data
+    from MS1.explore import test_metadata
     from MS1.model import to_flat
 
     parser = argparse.ArgumentParser(description="Evaluate non-learned Sudoku baselines.")
@@ -194,10 +196,11 @@ def main():
     )
     fit_x, fit_y = map(np.stack, zip(*train))
     test_x, test_y = map(np.stack, zip(*test))
+    meta = test_metadata(len(test_x), 0, args.data_dir)
 
     results = {
-        "random": _evaluate(RandomBaseline(args.seed).predict, test_x, test_y),
-        "majority": _evaluate(MajorityBaseline().fit(fit_x, fit_y).predict, test_x, test_y),
+        "random": _evaluate(RandomBaseline(args.seed).predict, test_x, test_y, meta),
+        "majority": _evaluate(MajorityBaseline().fit(fit_x, fit_y).predict, test_x, test_y, meta),
     }
 
     naive = NaiveCandidateBaseline()
@@ -208,12 +211,12 @@ def main():
         solved_flags.append(solved)
         return pred
 
-    results["naive_candidates"] = _evaluate(naive_predict, test_x, test_y)
+    results["naive_candidates"] = _evaluate(naive_predict, test_x, test_y, meta)
     results["naive_candidates"]["fully_solved_by_propagation"] = float(np.concatenate(solved_flags).mean())
 
     solver = BacktrackingSolver()
     n = min(args.n_solver, len(test_x))
-    results["backtracking"] = _evaluate(solver.predict, test_x[:n], test_y[:n])
+    results["backtracking"] = _evaluate(solver.predict, test_x[:n], test_y[:n], meta)
     results["backtracking"]["n_unsolved"] = solver.n_unsolved
 
     out = Path(args.out)

@@ -77,7 +77,8 @@ class TestEvaluate(unittest.TestCase):
             torch.save(checkpoint, run_dir / "model.pt")
             with patch.object(sys, "argv", ["evaluate", "--run-dir", directory, "--n", "1",
                                            "--test-offset", "2000"]):
-                with patch("MS1.evaluate._load_fixed", side_effect=[batch(1)] * 3) as load_fixed:
+                with patch("MS1.evaluate._load_fixed", side_effect=[batch(1)] * 3) as load_fixed, \
+                        patch("MS1.evaluate.test_metadata", return_value={}):
                     evaluate_main()
 
             self.assertEqual(load_fixed.call_args_list[0].kwargs["skip"], 2000)
