@@ -185,8 +185,7 @@ def fig_examples(train, q, a, out):
         if len(sub):
             idx.append(sub.sort_values([key, "rating"], ascending=[ascending, True]).index[0])
     titles = [f"{train.at[i, 'source']}\n{train.at[i, 'clues']} clues, rating {train.at[i, 'rating']}" for i in idx]
-    fig = show([a[i] for i in idx], clues=[q[i] for i in idx], titles=titles, show_plot=False,
-               ncols=len(idx), suptitle="Clue count does not determine difficulty")
+    fig = show([a[i] for i in idx], clues=[q[i] for i in idx], titles=titles, show_plot=False, ncols=len(idx))
     fig.savefig(out, dpi=200, bbox_inches="tight")
     plt.close(fig)
 

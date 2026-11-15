@@ -89,13 +89,13 @@ def learning_curves(results_dir, out):
                 ax.plot(log["step"], log[f"fresh_{metric}"], color=color, linestyle=":", label=f"{label}: unseen train")
             ax.set(title=title, xlabel="training step")
             ax.grid(alpha=0.3)
-    axes[0].legend(fontsize=7)
+    axes[0].legend(fontsize=9)
     fig.tight_layout()
     fig.savefig(out, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
 
-def _bars(ax, groups, series, title):
+def _bars(ax, groups, series, title, rotate=0):
     """series: {label: (breakdown dict, color)}; bars for each group present in the first series."""
     width = 0.8 / len(series)
     x = np.arange(len(groups))
@@ -105,32 +105,37 @@ def _bars(ax, groups, series, title):
         ax.bar(pos, vals, width, color=color, label=label)
         for xi, v in zip(pos, vals):
             if not np.isnan(v):
-                ax.text(xi, v + 0.01, f"{v:.2f}", ha="center", fontsize=7)
+                ax.text(xi, v + 0.01, f"{v:.2f}", ha="center", fontsize=8)
     first = next(iter(series.values()))[0]
     ax.set_xticks(x)
-    ax.set_xticklabels([f"{g}\n(n={first[g]['n']})" for g in groups], fontsize=8)
-    ax.set_ylim(0, 1.05)
-    ax.set_title(title, fontsize=10)
+    ax.set_xticklabels([f"{g}\n(n={first[g]['n']})" for g in groups], fontsize=9, rotation=rotate,
+                       ha="right" if rotate else "center")
+    ax.set_ylim(0, 1.1)
+    ax.set_title(title, fontsize=11)
     ax.grid(axis="y", alpha=0.3)
 
 
 def breakdown_figure(results_dir, out):
-    """Exact-match by clue count, rating band and shared clue pattern; model vs naive candidates, same test rows."""
+    """Exact match by clue count, rating band, source and shared clue pattern; model vs naive candidates."""
     model = (_load_json(results_dir / MAIN_RUN / "eval_fresh.json") or {}).get("test")
     naive = (_load_json(results_dir / "baselines.json") or {}).get("naive_candidates")
     if model is None or "by_rating" not in model or naive is None:
         print("breakdown figure skipped: run MS1.evaluate on the main run and MS1.baselines first")
         return
     keys = [("by_clue_bucket", "by number of given clues"), ("by_rating", "by difficulty rating"),
-            ("by_shared_pattern", "by clue pattern shared with train")]
+            ("by_source", "by source collection"), ("by_shared_pattern", "by clue pattern shared with train")]
     keys = [(k, t) for k, t in keys if k in model]
-    fig, axes = plt.subplots(1, len(keys), figsize=(5 * len(keys), 3.8), sharey=True)
-    for ax, (key, title) in zip(np.atleast_1d(axes), keys):
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharey=True)
+    for ax in axes.ravel()[len(keys):]:
+        ax.axis("off")
+    for ax, (key, title) in zip(axes.ravel(), keys):
         series = {"recurrent transformer": (model[key], MODEL_COLOR),
                   "naive candidates": (naive.get(key, {}), NAIVE_COLOR)}
-        _bars(ax, list(model[key]), series, f"Exact match {title}")
-    np.atleast_1d(axes)[0].set_ylabel("exact-match accuracy")
-    np.atleast_1d(axes)[0].legend(fontsize=8)
+        groups = sorted(model[key], key=lambda g: -model[key][g]["n"]) if key == "by_source" else list(model[key])
+        _bars(ax, groups, series, f"Exact match {title}", rotate=25 if key == "by_source" else 0)
+    for ax in axes[:, 0]:
+        ax.set_ylabel("exact-match accuracy")
+    axes[0, 0].legend(fontsize=9)
     fig.tight_layout()
     fig.savefig(out, dpi=200, bbox_inches="tight")
     plt.close(fig)
