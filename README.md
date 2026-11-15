@@ -1,20 +1,20 @@
 # pml_frm
 University project on the paper **"Flow Reasoning Models: Turning Flows Into Efficient Recurrent Reasoners"** (Helbling, Bryutkin et al., arXiv 2606.29150). The first milestone (MS1) works on Sudoku-Extreme: a puzzle is given and a model has to produce its unique solution.
 
-Current status and hand-over notes for new sessions: [PROJECT_STATE.md](PROJECT_STATE.md).
-
 ## Repository layout
 
 | Path | Content |
 |---|---|
 | `MS1/data_loader.py` | `load_data()`: lazy train/test generators over the Sudoku-Extreme CSVs |
 | `MS1/validate_dataset.py` | Full-dataset integrity check (run on the cluster) |
-| `MS1/visualization.py` | `show()`: renders Sudoku boards, optionally to a file |
+| `MS1/visualization.py` | `show()`: renders Sudoku boards with optional clue shading and error marking, optionally to a file |
+| `MS1/explore.py` | Dataset statistics, clue-pattern leakage screen, dataset figures |
 | `MS1/model.py` | `to_flat`, `augment`, `augmented` (training-stream augmentation), `Model`, `decode`, `sudoku_loss` |
 | `MS1/train.py` | Training loop, evaluation, logging and checkpointing |
-| `MS1/evaluate.py` | Evaluate a saved model on test, seen-train and fresh-train puzzles |
+| `MS1/evaluate.py` | Evaluate a saved model on test, seen-train and unseen-train puzzles, with breakdowns |
 | `MS1/baselines.py` | Random, majority-digit, naive-candidate and backtracking baselines |
-| `MS1/metrics.py` | Cell accuracy, exact match, rule violations, clue-bucket breakdown |
+| `MS1/metrics.py` | Cell accuracy, exact match, rule violations, breakdowns by clues, rating, source |
+| `MS1/make_figures.py` | Results table and result figures |
 | `MS1/run_train.sbatch` | Hydra job script (`smoke`, `baselines`, `noaug`, `aug`, `long`, `aug300`, `long300`) |
 | `MS1/tests/` | Unit tests |
 | `pml.def` | Apptainer recipe for the Hydra container |
@@ -80,15 +80,12 @@ sbatch --time=01:30:00 MS1/run_train.sbatch long300
 
 - Check a job with `squeue -j JOB_ID`; after it leaves the queue, use `sacct -j JOB_ID --format=JobID,State,ExitCode,Elapsed`. Logs are named `~/ms1_frm_JOB_ID.log`.
 - Training outputs are stored under `~/MS1/results/`; checkpoints are written during training and `results.json` is written when training finishes. These files remain on Hydra until copied locally.
-- From Windows PowerShell, individual code files can be copied with `scp -i $env:USERPROFILE\.ssh\id_rsa_hydra_work MS1\model.py MS1\train.py MS1\evaluate.py MS1\run_train.sbatch pml05@hydra.ml.tu-berlin.de:~/MS1/`. Confirm remote changes before overwriting files; related Python files should be kept compatible.
-- To retrieve results, use `scp -i $env:USERPROFILE\.ssh\id_rsa_hydra_work -r pml05@hydra.ml.tu-berlin.de:~/MS1/results MS1\`. This can overwrite matching local results; check them first. Copy completed runs rather than files still being written.
+- Code files are copied with `scp` from a local terminal; results are copied back the same way (`scp -r ...:~/MS1/results MS1/`).
 - Building the container needs memory: `srun --partition=cpu-2h --mem=32G --cpus-per-task=4 --pty bash`, then `apptainer build pml.sif pml.def`.
-- Coding agents must not be used on Hydra (course rules). Run cluster commands manually.
 
 ## Team split for MS1
 
-1. **Data:** loader, dataset on the cluster, discussion and AI-usage sections of the report, final consistency pass.
-2. **Exploration and visualization:** `show()`, dataset-overview section of the report.
-3. **Model and baselines:** model, loss, training loop, baselines, baseline-and-evaluation section of the report.
+1. **Data:** loader, dataset on the cluster, discussion and AI-usage sections of the report, final consistency pass. (Mark)
+2. **Exploration and visualization:** `show()`, dataset-overview section of the report. (Anna)
+3. **Model and baselines:** model, loss, training loop, baselines, baseline-and-evaluation section of the report. (Mark & Gustavo) 
 
-Deadlines: report 15.11, presentation 17.11 (our group presents MS1).

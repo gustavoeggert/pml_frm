@@ -12,3 +12,6 @@ __pycache__/
 data/
 checkpoints/
 MS1/results/
+
+# Local notes
+PROJECT_STATE.md
