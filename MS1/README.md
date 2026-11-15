@@ -152,7 +152,7 @@ Validation includes checking puzzle lengths, allowed characters, clue-solution c
 
 Exact overlaps are checked using BLAKE2b hashes of normalized puzzle strings.
 
-**Limitations:** Equivalent but non-identical Sudoku puzzles have not been checked. Duplicates within the training set have not been assessed.
+**Limitations:** Equivalent but non-identical puzzles are not checked here; `MS1/explore.py` screens for them with a symmetry-invariant clue-pattern signature.
 
 ### Running validation on Hydra
 
@@ -178,14 +178,13 @@ Automated unit tests are available in `MS1/tests/`:
 
 - `test_data_loader.py`: sample counts, board shapes, clue consistency, sample limits, transformations, generator behavior.
 - `test_metrics.py`, `test_baselines.py`, `test_model.py`: metrics, baselines, augmentation, model shapes/gradients/overfitting, batching.
+- `test_explore.py`: invariance of the clue-pattern signature under Sudoku symmetries.
 
 Run them locally from the repository root:
 
 ```bash
 python -m unittest discover -s MS1/tests -v
 ```
-
-The tests cover sample counts, board shapes, clue consistency, sample limits, transformations and basic generator behavior.
 
 The full-dataset integrity check is performed separately on Hydra.
 
@@ -205,15 +204,12 @@ The loader uses the shared dataset directly without copying its contents into ea
 
 CPU-intensive validation and training experiments must run through SLURM compute allocations rather than on the login node.
 
-**Important:** Coding agents are prohibited on Hydra under the PML course rules. AI-assisted coding is permitted locally, but computational jobs must be submitted manually.
-
 ## 7. Known Limitations and Future Improvements
 
 - Streaming CSV is memory-efficient but less suitable for high-speed random access.
 - Each generator iteration reads the relevant CSV sequentially.
 - Repeated experiments may benefit from preprocessing into memory-mapped arrays or another indexed format.
 - The current implementation preserves the official train/test split rather than constructing a new split.
-- Additional checks for equivalent Sudoku puzzles may be useful for more rigorous evaluation.
 
 ## 8. Dependencies
 
@@ -248,15 +244,17 @@ Model code flattens each `(9, 9)` grid to 81 `int64` digits (`MS1/model.py::to_f
 
 ### Metrics (`MS1/metrics.py`)
 
-Cell accuracy on blank cells, exact-match puzzle accuracy (primary), valid-grid rate (no row/column/box duplicates), and all of these by clue-count bucket. Precision/recall do not fit the task: it is a 9-class, structured prediction with one correct answer per puzzle.
+Cell accuracy on blank cells, exact-match puzzle accuracy (primary), valid-grid rate (no row/column/box duplicates), and breakdowns by clue count, difficulty rating, source and shared clue pattern. Precision/recall do not fit the task: it is a 9-class, structured prediction with one correct answer per puzzle.
 
 ### Training (`MS1/train.py`)
 
 `python -m MS1.train --n-train 100000 --n-test 2000 --epochs 3 [--augment]` logs train loss, a probe of seen training puzzles, test puzzles and, by default, 2000 subsequent train-file rows (`--n-fresh 0` disables this last evaluation). It writes `log.csv`, `results.json` and `model.pt` into `--out-dir`. Checkpoints are saved during training; the final results file is written on completion.
 
-`python -m MS1.evaluate --run-dir MS1/results/run_more_data` evaluates a saved model on test, seen-train and fresh-train rows and writes `eval_fresh.json`. Fresh rows follow the training range in the CSV; because the data may be ordered or contain equivalent puzzles, this comparison alone does not establish whether a gap is due to memorization or distribution differences.
+`python -m MS1.evaluate --run-dir MS1/results/run_more_data` evaluates a saved model on test, seen-train and unseen-train rows and writes `eval_fresh.json`. `--test-offset 2000` evaluates test rows 2,001-4,000 instead and writes `eval_test_offset_2000.json`; this second slice was used once for the final configuration.
 
-For evaluation after choosing a model, `python -m MS1.evaluate --run-dir MS1/results/run_more_data --n 2000 --test-offset 2000` skips the first 2,000 test rows and writes `eval_test_offset_2000.json` without replacing `eval_fresh.json`. Test rows 2,001-4,000 were used to evaluate the selected 6-epoch configuration; three rows had also been used in a toy-model smoke test. Exact or equivalent puzzle overlap with earlier slices has not been checked.
+### Exploration and figures
+
+`python -m MS1.explore` computes the dataset statistics and the leakage screen and builds the dataset figures (full run needs ~32 GB RAM; `--nrows N` for a quick run). `python -m MS1.make_figures` builds the results table and result figures from `MS1/results/`.
 
 ### Running on Hydra
 
@@ -274,6 +272,6 @@ sbatch --time=01:30:00 MS1/run_train.sbatch long300
 
 `long` trains the larger model on 100k puzzles for 6 epochs. `aug300` trains it on 300k for 3 epochs with augmentation; `long300` uses 300k for 6 epochs without augmentation. They write to separate result directories. Use `squeue -j JOB_ID` for active jobs and `sacct -j JOB_ID --format=JobID,State,ExitCode,Elapsed` for completed jobs. Output logs are `~/ms1_frm_JOB_ID.log`.
 
-### Status
+### Results
 
-Cluster runs with peer attention have progressed beyond chance. The 300k-puzzle, 3-epoch larger-model run reached 72.81% test cell accuracy and 32.85% exact match on 2,000 puzzles. The matching augmentation run reached 72.07% and 31.65%; the 6-epoch unaugmented run reached 76.85% and 42.75%. On the subsequent 2,000 test rows, the selected 6-epoch configuration achieved 76.22%/39.45% and 76.09%/38.30% cell accuracy/exact match for seeds 0 and 1. Backtracking solved all 300 evaluated puzzles in the baseline run. See [PROJECT_STATE.md](../PROJECT_STATE.md) for sample sizes and limitations.
+Final configuration (width 192, 12 steps, 300k puzzles, 6 epochs): 76.9% cell accuracy and 42.8% exact match on test rows 1-2,000; 76.2% / 38.9% (mean of two seeds) on test rows 2,001-4,000. All runs are listed in [figures/results_table.csv](figures/results_table.csv).
