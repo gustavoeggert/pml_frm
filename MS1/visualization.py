@@ -58,7 +58,7 @@ def show(x, outfile=None, titles=None, show_plot=True, clues=None, target=None,
         ax.set_ylim(9, 0)
         ax.set_aspect("equal")
         ax.axis("off")
-        ax.set_title(title, fontsize=9, pad=6)
+        ax.set_title(title, fontsize=12, pad=6)
 
         for row in range(9):
             for col in range(9):
@@ -71,7 +71,7 @@ def show(x, outfile=None, titles=None, show_plot=True, clues=None, target=None,
                 if value != 0:
                     ax.text(
                         col + 0.5, row + 0.52, str(value), ha="center", va="center",
-                        fontsize=11 * cell_size / 0.55,
+                        fontsize=15 * cell_size / 0.55,
                         fontweight="bold" if given[row, col] else "normal",
                         color="black" if given[row, col] else (WRONG_COLOR if wrong[row, col] else FILL_COLOR),
                     )
@@ -92,7 +92,7 @@ def show(x, outfile=None, titles=None, show_plot=True, clues=None, target=None,
                    Patch(facecolor="white", edgecolor=FILL_COLOR, label="filled in")]
         if target is not None:
             handles.append(Patch(facecolor=WRONG_COLOR, alpha=0.25, edgecolor=WRONG_COLOR, label="incorrect"))
-        fig.legend(handles=handles, loc="lower center", ncol=len(handles), frameon=False, fontsize=9,
+        fig.legend(handles=handles, loc="lower center", ncol=len(handles), frameon=False, fontsize=12,
                    bbox_to_anchor=(0.5, -0.02))
     if suptitle:
         fig.suptitle(suptitle, fontsize=11, y=1.04)
